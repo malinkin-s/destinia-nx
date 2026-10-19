@@ -1,0 +1,44 @@
+# Nintendo Switch build (devkitA64 + libnx + SDL2). Run through ../tools/build_switch.sh
+.SUFFIXES:
+ifeq ($(strip $(DEVKITPRO)),)
+$(error DEVKITPRO is not set; use tools/build_switch.sh)
+endif
+include $(DEVKITPRO)/libnx/switch_rules
+
+TARGET   := destinia
+BUILD    := build_switch
+SRC      := src/cpu.c src/hle.c src/native.c src/apk.c src/sha256.c src/audio.c src/main.c
+OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
+APP_TITLE   := Destinia
+APP_AUTHOR  := GAMEVIL / Clean-room
+APP_VERSION := 0.7.3
+ICON        := icon.jpg
+
+SDL2CONF := $(PORTLIBS)/bin/sdl2-config
+ARCH     := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
+CFLAGS   := -g -Wall -O2 -ffunction-sections $(ARCH) -D__SWITCH__ -I$(LIBNX)/include -I$(PORTLIBS)/include \
+            $(shell $(SDL2CONF) --cflags)
+LDFLAGS  := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(BUILD)/$(TARGET).map
+MIXLIBS  := -lSDL2_mixer -lvorbisidec -logg -lmodplug -lmpg123 -lopusfile -lopus
+LIBS     := $(MIXLIBS) $(shell $(SDL2CONF) --libs) -L$(PORTLIBS)/lib -L$(LIBNX)/lib $(MIXLIBS) -lstdc++ -lz -lm -lnx
+
+all: $(TARGET).nro
+
+$(BUILD):
+	@mkdir -p $@
+
+$(BUILD)/%.o: src/%.c src/guest.h src/game.h src/apk.h src/audio.h src/jni_names.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).elf: $(OBJ)
+	$(CC) $(LDFLAGS) $(OBJ) $(LIBS) -o $@
+
+$(TARGET).nacp:
+	nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
+
+$(TARGET).nro: $(TARGET).elf $(TARGET).nacp $(ICON)
+	elf2nro $< $@ --nacp=$(TARGET).nacp --icon=$(ICON)
+
+clean:
+	rm -rf $(BUILD) $(TARGET).elf $(TARGET).nro $(TARGET).nacp
+.PHONY: all clean

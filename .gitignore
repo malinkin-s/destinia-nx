@@ -1,0 +1,67 @@
+# =====================================================================
+# Destinia Switch Port (.gitignore)
+# Clean-room Homebrew - Never commit copyrighted game files, keys, or build artifacts
+# =====================================================================
+
+# Game assets & APKs (User must supply their own legally acquired APK)
+*.apk
+*.obb
+*.ddt
+*.dex
+*.so
+
+# Nintendo Switch Keys & Encryption Data
+keys.dat
+prod.keys
+title.keys
+*.keys
+tools/hacBrewPack/
+
+# Build outputs (Switch & Host)
+port/destinia
+port/destinia.elf
+port/destinia.nro
+port/destinia.nacp
+port/isatest
+port/build_switch/
+build/
+build_switch/
+*.o
+*.a
+*.elf
+*.nro
+*.nacp
+*.nso
+*.npdm
+
+# Forwarder & Release distribution binaries (Uploaded to GitHub Releases)
+dist/*.zip
+dist/*.nsp
+dist/*.nsz
+dist/*.nro
+dist/destinia-switch-*/
+staging_forwarder/
+out_nsp/
+
+# Scratch, research, dumps and decompilation artifacts
+work/
+ref/
+hacbrewpack_backup/
+logs_nx/
+log.txt
+*.log
+
+# Save data & screenshots
+save/
+shots/
+*.ppm
+
+# Python & editor cache
+__pycache__/
+*.py[cod]
+*$py.class
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

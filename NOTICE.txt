@@ -1,0 +1,13 @@
+Third-party software linked into destinia.nro (Switch build):
+  SDL2, SDL2_mixer            zlib license
+  libnx                       ISC license
+  libvorbisidec, libogg       BSD-style licenses
+  opus, opusfile              BSD-style licenses
+  libmodplug                  public domain
+  mpg123                      LGPL-2.1 (statically linked; source: https://www.mpg123.de/ ; the object files needed
+                              to relink are produced by tools/build_switch.sh from this repository)
+  zlib                        zlib license
+Build toolchain: devkitPro devkitA64 (docker image devkitpro/devkita64).
+
+"Destinia" and all its code and data belong to their owner. This project is an unofficial compatibility layer: it
+contains no game code or assets and only runs a copy of the game that you supply.
