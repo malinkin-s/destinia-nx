@@ -14,6 +14,8 @@ An unofficial clean-room Nintendo Switch port and compatibility layer for the cl
 [![Architecture](https://img.shields.io/badge/Architecture-ARMv5_Thumb_%2F_AArch64-0091BD?style=for-the-badge&logo=arm&logoColor=white)](#)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#)
 
+**English** | [Русский](README_RU.md)
+
 </div>
 
 ---
