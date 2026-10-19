@@ -39,6 +39,7 @@ dist/*.zip
 dist/*.nsp
 dist/*.nsz
 dist/*.nro
+dist/*.md
 dist/destinia-switch-*/
 staging_forwarder/
 out_nsp/
