@@ -269,6 +269,11 @@ static uint32_t c_fopen(Cpu *c) {
         snprintf(open_path, sizeof open_path, "%s", path);
     }
     FILE *f = fopen(open_path, m2);
+    if (!f && !is_w) {
+        char tmp_path[516];
+        snprintf(tmp_path, sizeof tmp_path, "%s.tmp", path);
+        f = fopen(tmp_path, m2);
+    }
     if (!f) { if (g_log) fprintf(stderr, "fopen %s %s -> NULL\n", open_path, mode); return 0; }
     for (int i = 0; i < MAX_FILES; i++) {
         if (!g_files[i].f) {
@@ -292,6 +297,7 @@ static uint32_t c_fclose(Cpu *c) {
         if (fd >= 0) fsync(fd);
         fclose(f);
         if (g_files[i].is_write) {
+            remove(g_files[i].path);
             rename(g_files[i].tmp, g_files[i].path);
         }
         memset(&g_files[i], 0, sizeof(HostFile));

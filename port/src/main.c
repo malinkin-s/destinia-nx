@@ -179,6 +179,21 @@ static int load_game(const char *apk_path, const char *save_dir, int virtual_tim
         if (apk_size(g_apk, "assets/0_en.ddt") < 0) guest_fatal(14, "The APK is missing the game data (assets/). Is it a stripped or damaged copy?");
     }
     mkdirs(save_dir);
+    {
+        const char *slots[] = {"msave.dat", "save0.dat", "save1.dat", "save2.dat", NULL};
+        for (int i = 0; slots[i]; i++) {
+            char p_tmp[512], p_dat[512];
+            snprintf(p_tmp, sizeof(p_tmp), "%s/%s.tmp", save_dir, slots[i]);
+            snprintf(p_dat, sizeof(p_dat), "%s/%s", save_dir, slots[i]);
+            FILE *ft = fopen(p_tmp, "rb");
+            if (ft) {
+                fclose(ft);
+                remove(p_dat);
+                rename(p_tmp, p_dat);
+                fprintf(stderr, "[save] recovered orphaned %s -> %s\n", p_tmp, p_dat);
+            }
+        }
+    }
     static GameHost host;
     host.asset_size = host_asset_size; host.asset_read = host_asset_read;
     host.play_sound = host_play_sound; host.set_volume = host_set_volume; host.vibrate = host_vibrate;
