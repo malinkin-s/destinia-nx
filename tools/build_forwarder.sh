@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 TITLE_ID="0100d3571a000000"
 TITLE_NAME="Destinia"
 AUTHOR="GAMEVIL / Clean-room"
-VERSION="0.7.3"
+VERSION="1.0.0"
 
 # hacBrewPack binary and keys
 HACBREWPACK="${HACBREWPACK:-$(command -v hacbrewpack || true)}"
@@ -38,6 +38,7 @@ cp "$ROOT_DIR/tools/forwarder_builder/nx-hbloader/hbl.npdm" "$STAGING/exefs/main
 
 docker run --rm -u "$(id -u):$(id -g)" -v "$ROOT_DIR":/work -w /work devkitpro/devkita64 \
     nacptool --create "$TITLE_NAME" "$AUTHOR" "$VERSION" staging_forwarder/control/control.nacp --titleid="0100D3571A000000"
+/usr/bin/python3 -c "f=open('$STAGING/control/control.nacp','r+b'); f.seek(0x3035); f.write(b'\x02'); f.close()"
 
 cp "$ROOT_DIR/icon.jpg" "$STAGING/control/icon_AmericanEnglish.dat"
 
@@ -67,9 +68,9 @@ cp "out_nsp/${TITLE_ID}.nsp" "$NSP_TARGET"
 
 echo "[4/5] Compressing to NSZ format..."
 if [ -x "$(command -v nsz)" ]; then
-    nsz -w -C "$NSP_TARGET" -o dist/
+    nsz --keys "$KEYS_FILE" -w -C "$NSP_TARGET" -o dist/
 elif [ -x "$HOME/.local/bin/nsz" ]; then
-    "$HOME/.local/bin/nsz" -w -C "$NSP_TARGET" -o dist/
+    "$HOME/.local/bin/nsz" --keys "$KEYS_FILE" -w -C "$NSP_TARGET" -o dist/
 fi
 
 echo "[5/5] Success! Output files:"

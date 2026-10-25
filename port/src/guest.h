@@ -49,7 +49,12 @@ uint32_t guest_heap_end(void);
 uint32_t guest_lib_span(void);
 void natives_install(int verify_every);     /* native.c: register overrides (0 = off, -1 = none) */
 void native_draw_hotbar_overlay(uint16_t *fb);
+void native_draw_title_overlay(uint16_t *fb);
+void native_draw_perf_overlay(uint16_t *fb, const char *text);
 uint16_t *game_frame_ptr(void);
+uint8_t *economy_patch_asset(const char *name, uint8_t *data, size_t *len);
+void economy_install(void);
+void economy_step(void);
 
 /* ---- CPU ---- */
 typedef uint32_t (*hle_fn)(Cpu *c);           /* returns r0 (r1 for 64-bit via c->r[1]) */

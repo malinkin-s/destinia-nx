@@ -1,49 +1,85 @@
-<div align="center">
+<p align="center">
+  <img src="docs/media/banner.svg" alt="Destinia — Nintendo Switch port" width="100%">
+</p>
 
-<a href="icon.jpg"><img src="icon.jpg" alt="Destinia Nintendo Switch" width="160"></a>
+<p align="center">
+  <b>English</b> · <a href="README_RU.md">Русский</a>
+</p>
 
-# destinia-nx
+<p align="center">
+  <img alt="status, platform, engine, license" src="docs/media/badges.svg">
+</p>
 
-**Destinia for Nintendo Switch & PC**
+A native clean-room Nintendo Switch and PC port of the classic Action RPG **Destinia** (GAMEVIL, 2011, v1.06).
+The game's ARMv5 Thumb engine (`libdestinia_jni.so`) runs directly through a lightweight C interpreter with High-Level Emulation (HLE) of Android and JNI platform services (framebuffer presentation, file I/O, audio streaming, input processing, and timing). Critical rendering hot spots (weapon blitters, aura effects, alpha blending, screen darkeners) are replaced with verified native C routines for optimal performance.
 
-An unofficial clean-room Nintendo Switch port and compatibility layer for the classic 2011 Action RPG  
-**Destinia** (Gamevil, v1.06).
+> [!IMPORTANT]
+> **[Version 1.0.0](https://github.com/malinkin-s/destinia-nx/releases/tag/v1.0.0)** is the full production release. Tested on real Nintendo Switch hardware with rock-solid 60 FPS in combat, complete controller support, built-in video capture / SysDVR streaming, and an offline Gold economy. The game's assets are not included: you must provide your own legally acquired `DESTINIA_v1_06.apk` (installation instructions below).
 
-[![Switch](https://img.shields.io/badge/Nintendo_Switch-Homebrew-E60012?style=for-the-badge&logo=nintendoswitch&logoColor=white)](#)
-[![Version](https://img.shields.io/badge/Version-0.7.3-4C8BF5?style=for-the-badge)](#)
-[![Architecture](https://img.shields.io/badge/Architecture-ARMv5_Thumb_%2F_AArch64-0091BD?style=for-the-badge&logo=arm&logoColor=white)](#)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#)
+## Status
 
-**English** | [Русский](README_RU.md)
+**Version 1.0.0, 2026-10-25.** Measured on a Nintendo Switch at stock clocks (handheld, CPU 1020 MHz, GPU 384 MHz).
 
-</div>
+| Area | Switch | Notes |
+|---|---|---|
+| Boot, logos, menus | **Works** | Stable 60 FPS, menu tab switching via **L / R**, selected items highlighted |
+| Story mode & exploration | **Works** | Smooth traversal, continuous walking after dashes and zone transitions |
+| Combat & skills | **Works** | Rock-solid 60 FPS, 0 frame drops during critical strikes and skill effects |
+| HUD & Controls | **Works** | Clean console layout, mobile touch buttons hidden, two-page **Hold L** hotbar |
+| Saves on SD card | **Works** | Saved and loaded seamlessly to SD card storage |
+| Audio & BGM | **Works** | SDL2_mixer hardware audio playback and background music |
+| Video capture & SysDVR | **Works** | Native 30s video recording via Capture button (`video_capture = 2`) and SysDVR streaming |
+| Special Shop & Revive | **Works** | Microtransactions replaced with in-game Gold, instant revive on death |
+| Sleep mode (suspend/resume) | **Works** | Clean suspend to HOME menu and sleep mode with audio mute |
 
----
+### What was solved to get here
 
-## About
+- **Clean-room ARMv5 Thumb interpreter & HLE**: Runs the original 32-bit ARM engine binary on 64-bit Horizon OS (AArch64) and desktop x86_64 without Android virtualization overhead.
+- **Bit-exact verified hot paths (`golden.sh`)**: All native replacements pass a 700-frame pixel-for-pixel regression test against the reference emulator (`PASS: 700/700 frames identical`).
+- **Native rendering routines**: Hand-optimized C blitters (`Grp_drawWPNImage`, `_Grp_drawAura16`, `Grp_closeupScreen2`, `_Grp_drawDodgeCol16`) eliminate all frame-time spikes in heavy combat.
+- **Console HUD overhaul**: Mobile touchscreen D-pad and virtual buttons hidden; quickslot arc redesigned into an ergonomic 10-slot gamepad hotbar with dynamic button glyphs (`[ZL], [Y], [X], [R], [ZR]` $\leftrightarrow$ `[L+ZL]..[L+ZR]`).
+- **Seamless traversal**: Left analog stick direction automatically resumes walking after dashes and map transitions (`resume_walk`).
+- **Offline Gold economy**: Network billing replaced with in-game Gold purchases ([docs/economy.md](docs/economy.md)), death revive made responsive and reliable.
+- **Native video capture**: Added Switch NACP automatic gameplay recording permission (`0x02`), enabling SysDVR USB/network streaming and 30-second album capture.
 
-`destinia-nx` is a native clean-room C port and compatibility layer that executes the ARM Thumb engine (`libdestinia_jni.so`) of **Destinia** (v1.06, 2011, GAMEVIL) on Nintendo Switch (Horizon OS) and PC.
+## Screenshots
 
-Instead of running an Android emulator or virtual machine, the project embeds a lightweight interpreter with High-Level Emulation (HLE) of the Android and JNI platform services (framebuffer presentation, file I/O, audio streaming, input processing, and timing). Critical rendering hotspots (weapon blitters, alpha blending, screen darkeners) are replaced with verified native C routines for optimal performance.
+Captured directly on a Nintendo Switch (640×360), version 1.0.0.
 
-**This repository and its releases contain no game code or assets.** You must supply your own legally acquired copy of `DESTINIA_v1_06.apk`. The native library inside the APK is verified at launch by SHA-256 (`8464fc90edab73ee67bf8528aa1d40a5a2a229a888ca8c8a14e9fbc74640d829`).
-
----
-
-## Features & Improvements
-
-- **Native 60 FPS Performance**: Optimized C blitters for sprite rendering (`Grp_drawWPNImage`, `Grp_drawWPNImage2`, `Grp_darkScreen`, `Grp_pxlMultiply`) ensure stable 60 frames per second without CPU throttling.
-- **Console ARPG HUD Redesign**: Removed legacy mobile touch D-pads and virtual buttons when playing with a controller.
-- **Two-Page Shift Hotbar (Hold L)**:
-  - Quick-slot arc redesigned into a console-friendly horizontal hotbar.
-  - Holding **L** seamlessly shifts between **Quick Slots 1–5** and **6–10** with matching button glyphs (`[ZL], [Y], [X], [R], [ZR]` $\leftrightarrow$ `[L+ZL], [L+Y], [L+X], [L+R], [L+ZR]`).
-- **Full Controller & Touchscreen Support**: Native handling of Joy-Cons, Nintendo Switch Pro Controller, and capacitive touchscreen (direct menu tapping and virtual analog stick drag).
-- **HD Rumble / Haptics**: Calibrated pulse haptics on attacks, critical strikes, incoming damage, and hotbar shifts.
-- **Hardware VSync & Scaling**: Sharp integer-scaled 400×240 pixel art output at 720p (Handheld) and 1080p (Docked) with zero tearing.
-- **Suspend & Resume Safety**: Full sleep/wake handling (`SDL_APP_WILLENTERBACKGROUND`); audio and vibration safely stop when entering the Home menu or putting the console to sleep.
-- **Offline Single-Player**: Legacy network billing and server prompts are cleanly bypassed without hanging or requiring an internet connection.
-
----
+<table>
+  <tr>
+    <td><img src="docs/media/switch_title.jpg" alt="Title screen"></td>
+    <td><img src="docs/media/switch_menu.jpg" alt="Mode select menu"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Title screen</sub></td>
+    <td align="center"><sub>Mode select menu</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/switch_combat_action.jpg" alt="Combat with console HUD"></td>
+    <td><img src="docs/media/switch_combat_field.jpg" alt="Combat in the field"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Combat with console hotbar</sub></td>
+    <td align="center"><sub>Field battle</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/switch_field.jpg" alt="World exploration"></td>
+    <td><img src="docs/media/switch_dungeon.jpg" alt="Dungeon exploration"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>World exploration</sub></td>
+    <td align="center"><sub>Dungeon</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/switch_dialogue.jpg" alt="Story dialogue"></td>
+    <td><img src="docs/media/switch_status_menu.jpg" alt="Character status menu"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Story dialogue</sub></td>
+    <td align="center"><sub>Character status & equipment</sub></td>
+  </tr>
+</table>
 
 ## Controls
 
@@ -56,13 +92,12 @@ Instead of running an Android emulator or virtual machine, the project embeds a 
 | **B** | Cancel / Character Menu (in field) |
 | **Minus (-)** | Toggle Mini Map |
 | **Plus (+)** | System Menu (Save / Settings) |
-| **Right Stick** | Move Virtual Pointer |
-| **RS (R3 click)** | Capture screenshot (`shots/shot_NNNN.ppm`) |
-| **Touchscreen** | Direct touch in menus / Drag left half of screen to walk |
+| **L / R** (character menu) | Switch between menu tabs |
+| **Capture button** | Short press for screenshot, hold for 30s video recording |
 
 ### Quick Slots Hotbar
 
-The quick slots use a two-page system. Hold **L** to switch to Page 2:
+The quick slots use an intuitive two-page system. Hold **L** to shift to Page 2:
 
 | Input | Page 1 (Neutral) | Page 2 (Holding L) |
 | :--- | :--- | :--- |
@@ -73,8 +108,6 @@ The quick slots use a two-page system. Hold **L** to switch to Page 2:
 | **ZR** | Quick Slot 4 (Skill) | Quick Slot 9 (Skill) |
 | **LS (L3 click)** | Quick Slot 5 (Direct access) | Quick Slot 10 (Direct access) |
 
----
-
 ## Installation & Running
 
 ### Requirements
@@ -83,7 +116,7 @@ The quick slots use a two-page system. Hold **L** to switch to Page 2:
 
 ### Setup
 1. Download the latest release from the [Releases](https://github.com/malinkin-s/destinia-nx/releases) page.
-2. Copy the files to your microSD card so the folder structure looks like this:
+2. Extract the archive onto your microSD card so the directory structure looks like this:
    ```text
    sdmc:/switch/destinia/
    ├── destinia.nro
@@ -94,19 +127,17 @@ The quick slots use a two-page system. Hold **L** to switch to Page 2:
 
 You can run the game in two ways:
 
-1. **Via Homebrew Menu**: Launch the Homebrew Menu (hold **R** on any installed game for full RAM access, or open Album) and select **Destinia**.
-2. **Via Home Menu Forwarder (Recommended)**:
-   - Install the included `Destinia [0100D3571A000000] [v0].nsp` using DBI, Tinfoil, TinWoo, or Sphaira (*"Install Forwarder"*).
+1. **Via Homebrew Menu**: Launch the Homebrew Menu (hold **R** while launching any installed game for full RAM access, or open Album) and select **Destinia**.
+2. **Via HOME Menu Forwarder (Recommended)**:
+   - Install `Destinia [0100D3571A000000] [v0].nsp` (or `.nsz`) using DBI, Tinfoil, TinWoo, or Sphaira.
    - Launch **Destinia** directly from the Nintendo Switch HOME menu.
-   - When updating the game in the future, you only need to replace `destinia.nro` on your SD card.
+   - When updating in the future, simply replace `destinia.nro` on your SD card.
 
----
-
-## Build
+## Building
 
 ### Nintendo Switch (.nro)
 
-Building for Nintendo Switch uses Docker with devkitPro `devkita64`:
+Building for Nintendo Switch uses Docker with devkitPro `devkitA64`:
 
 ```bash
 # Clean build
@@ -115,8 +146,11 @@ Building for Nintendo Switch uses Docker with devkitPro `devkita64`:
 # Build NRO (outputs to port/destinia.nro)
 ./tools/build_switch.sh -j$(nproc)
 
+# Build forwarder NSP / NSZ
+./tools/build_forwarder.sh
+
 # Package release zip
-./tools/package.sh 0.7.3
+./tools/package.sh 1.0.0
 ```
 
 ### PC (Linux / macOS)
@@ -133,35 +167,11 @@ make -C port -j$(nproc)
 
 ### Regression Tests (Golden Frames)
 
-To verify pixel-exact emulation against the Unicorn reference:
+To verify pixel-exact emulation against the reference:
 
 ```bash
 ./port/tests/golden.sh DESTINIA_v1_06.apk
 ```
-
----
-
-## Repository Layout
-
-```text
-destinia-nx/
-├── port/
-│   ├── src/               # Clean-room C interpreter, HLE dispatch, native blitters
-│   ├── Makefile           # PC Linux build
-│   ├── Makefile.switch    # Nintendo Switch libnx build
-│   └── tests/             # Bit-exact regression tests
-├── tools/
-│   ├── build_switch.sh    # Docker devkitA64 compilation wrapper
-│   ├── package.sh         # Release packaging script
-│   └── build_forwarder.sh # Home Menu forwarder builder
-├── docs/                  # Golden hashes and HLE platform specifications
-├── harness/               # Unicorn reference verification scripts
-├── icon.jpg               # Application icon
-├── LICENSE                # MIT License
-└── NOTICE.txt             # Third-party notices and licenses
-```
-
----
 
 ## Credits
 
@@ -170,18 +180,6 @@ destinia-nx/
 - **Reference & Inspiration**: aks796 ([a8retry_nx](https://github.com/aks796/a8retry_nx), android32).
 - **Libraries & Toolchains**: [devkitPro](https://devkitpro.org/) (devkitA64, libnx), [libSDL2](https://www.libsdl.org/), SDL2_mixer.
 
----
+## License and disclaimer
 
-## Contributing
-
-Pull requests and bug reports are welcome. Please ensure that:
-1. No copyrighted game code or binary assets are committed.
-2. The golden regression test (`./port/tests/golden.sh`) passes with 700/700 frames identical.
-
----
-
-## Disclaimer
-
-This is an unofficial fan-made project and is **not** affiliated with, endorsed by, or sponsored by Nintendo or GAMEVIL / Com2uS Holdings.  
-*Destinia* and all related characters and trademarks belong to their respective owners.  
-**No copyrighted game code, binary libraries, or assets are distributed in this repository.**
+MIT, see [LICENSE](LICENSE). This is a fan-made project and is **not** affiliated with, endorsed by, or sponsored by GAMEVIL, Com2uS Holdings, or Nintendo. *Destinia* and all related characters and trademarks belong to their respective owners. **No copyrighted game code, binary libraries, or assets are distributed in this repository.**

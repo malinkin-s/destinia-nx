@@ -54,7 +54,9 @@ static int host_asset_size(const char *name) {
     char p[256]; snprintf(p, sizeof p, "assets/%s", name); return g_apk ? apk_size(g_apk, p) : -1;
 }
 static uint8_t *host_asset_read(const char *name, size_t *len) {
-    char p[256]; snprintf(p, sizeof p, "assets/%s", name); return g_apk ? apk_read(g_apk, p, len) : NULL;
+    char p[256]; snprintf(p, sizeof p, "assets/%s", name);
+    uint8_t *d = g_apk ? apk_read(g_apk, p, len) : NULL;
+    return economy_patch_asset(name, d, len);       /* Special Shop: Gold instead of real money (docs/economy.md) */
 }
 static int g_audio_on;      /* GUI mode only: headless runs stay silent and just log */
 static uint8_t *audio_loader(const char *path, size_t *len) { return g_apk ? apk_read(g_apk, path, len) : NULL; }
@@ -259,6 +261,7 @@ static void rgb565_to_ppm(const uint8_t *fb, const char *path) {
 }
 static void do_warp(int area, int sub);
 static void pad_button(int b, int down);
+static void menu_tab_step(void);
 static int run_headless(const char *apk, const char *save, int frames, const char *script, const char *manifest,
                         const char *dumpdir, int dump_every, int trace, int profile) {
     if (load_game(apk, save, 1)) return 1;
@@ -277,11 +280,12 @@ static int run_headless(const char *apk, const char *save, int frames, const cha
                 else if (!strcmp(w, "warp")) evs[nev++] = (Ev){fr, 2, a, b, 0};
                 else if (!strcmp(w, "page")) evs[nev++] = (Ev){fr, 3, a, 0, 0};
                 else if (!strcmp(w, "button")) evs[nev++] = (Ev){fr, 4, a, b, 0};
+                else if (!strcmp(w, "field")) evs[nev++] = (Ev){fr, 5, 0, 0, 0};
             }
         }
         if (f) fclose(f);
     }
-    int r = game_init(); fprintf(stderr, "initGame -> %d\n", r);
+    int r = game_init(); fprintf(stderr, "initGame -> %d\n", r); economy_install();
     FILE *mf = manifest ? fopen(manifest, "w") : NULL;
     Uint64 t0 = SDL_GetPerformanceCounter(); uint64_t prev_ic = 0; static uint64_t per_frame[1 << 16];
     for (int fr = 0; fr < frames; fr++) {
@@ -292,15 +296,19 @@ static int run_headless(const char *apk, const char *save, int frames, const cha
             else if (evs[i].kind == 2) do_warp(evs[i].a, evs[i].b);
             else if (evs[i].kind == 3) game_set_hotbar_page(evs[i].a);
             else if (evs[i].kind == 4) pad_button(evs[i].a, evs[i].b);
+            else if (evs[i].kind == 5) { do_warp(0, 0); uint16_t z = 0; mem_write(mem_r32(LIB_BASE + 0x44278) + 0x4854, &z, 2); }
             else game_touch(evs[i].a, evs[i].b, evs[i].c);
         }
-        int d = game_run();
+        if (getenv("SETGOLD")) { int gf, gv; if (sscanf(getenv("SETGOLD"), "%d:%d", &gf, &gv) == 2 && gf == fr) { uint32_t a[1] = {(uint32_t)gv}; game_call("setMyGold", 1, a); } }
+        int d = game_run(); menu_tab_step(); economy_step();
+        if (getenv("GOLDDBG") && fr % 100 == 0 && fr >= atoi(getenv("GOLDDBG"))) { uint32_t g = game_call("getMyGold", 0, NULL), cs = game_call("getMyCash", 0, NULL); fprintf(stderr, "[gold] f%d gold=%u cash=%u\n", fr, g, cs); }
+        if (getenv("HERODBG") && fr >= atoi(getenv("HERODBG"))) { uint32_t c = mem_r32(LIB_BASE + 0x44278); fprintf(stderr, "[h] f%d act=%d keyflag=%d dir=%d pos=%d,%d state=%d tab=%d depth=%d w7c=%08x\n", fr, (int16_t)rd16(c + 0x4896), mem_r32(c + 0x486c), (int16_t)rd16(c + 0x4898), (int16_t)rd16(c + 0x4890), (int16_t)rd16(c + 0x4892), hero_state(), (int16_t)rd16(mem_r32(LIB_BASE + 0x441d4) + 0x7a) / 4096, (int16_t)rd16(mem_r32(LIB_BASE + 0x441d4) + 0x78), mem_r32(mem_r32(LIB_BASE + 0x441d4) + 0x7c)); }
         if (fr < (1 << 16)) { per_frame[fr] = game_icount() - prev_ic; prev_ic = game_icount(); }
         char h[33]; md5_hex(game_frame(), GAME_FB_BYTES, h);
         if (mf) fprintf(mf, "%d %s\n", fr, h);
         { static uint32_t last_sc; uint32_t sc = screen_id(); if (sc != last_sc) { fprintf(stderr, "[screen] f%d: 0x%x -> 0x%x\n", fr, last_sc, sc); last_sc = sc; } }
         if (dumpdir && dump_every && fr % dump_every == 0) {
-            if (hero_state() == 0) native_draw_hotbar_overlay(game_frame_ptr());
+            if (hero_state() == 0) { native_draw_hotbar_overlay(game_frame_ptr()); native_draw_title_overlay(game_frame_ptr()); }
             char p[512]; snprintf(p, sizeof p, "%s/frame_%04d.ppm", dumpdir, fr); rgb565_to_ppm(game_frame(), p);
         }
         if (d == 0) { fprintf(stderr, "game requested exit at frame %d\n", fr); break; }
@@ -601,7 +609,7 @@ static void in_key(int code, int down) { game_key(code, down); }
 static void in_touch(int x, int y, int type) { game_touch(x, y, type); }
 static int g_shot_no;
 static void screenshot(void) {   /* RS click / F12: dump the current frame next to the log */
-    if (hero_state() == 0) native_draw_hotbar_overlay(game_frame_ptr());
+    if (hero_state() == 0) { native_draw_hotbar_overlay(game_frame_ptr()); native_draw_title_overlay(game_frame_ptr()); }
 #ifdef __SWITCH__
     char p[128]; snprintf(p, sizeof p, DEFAULT_DIR "/shots/shot_%04d.ppm", g_shot_no++); mkdirs(DEFAULT_DIR "/shots");
 #else
@@ -611,20 +619,17 @@ static void screenshot(void) {   /* RS click / F12: dump the current frame next 
 }
 typedef struct Pad { float lx, ly, rx, ry; int dl, du, dr, dd; } Pad;
 static Pad g_pad;
-static int g_ptr_x = 200, g_ptr_y = 120, g_ptr_visible;
-static Uint64 g_ptr_t;
-
-static void tap_press(int x, int y) { in_touch(x, y, 0); }
-static void tap_release(int x, int y) { if (x < GAME_W / 2) in_touch(x, y, 1); }   /* the Java layer drops right-half releases */
 
 /* Direction keys of the game (probed): 0xd up, 0xe down, 0xf left, 0x10 right. They move the hero in the
  * field and move the selection in menus that support it; the stick/D-pad are digitised to them. */
 /* The game drops movement if a direction key is released while another one is still down, so a change of
  * direction is always sent as "release everything held, then press everything wanted". Diagonals are two keys.
  * The analogue stick is cut into 8 sectors (22.5 deg each way around the axes -> diagonals get a 45 deg sector). */
+static const int g_dir_codes[4] = {0xd, 0xe, 0xf, 0x10};
+static int g_dir_held[4];
+static int g_dir_last_key = -1; static Uint64 g_dir_last_t;
 static void update_joystick(float ax, float ay, int digital) {
-    static const int codes[4] = {0xd, 0xe, 0xf, 0x10};
-    static int held[4];
+    const int *codes = g_dir_codes; int *held = g_dir_held;
     int want[4] = {0, 0, 0, 0};
     if (digital) { want[0] = ay < -0.5f; want[1] = ay > 0.5f; want[2] = ax < -0.5f; want[3] = ax > 0.5f; }
     else if (ax * ax + ay * ay > 0.35f * 0.35f) {
@@ -635,10 +640,10 @@ static void update_joystick(float ax, float ay, int digital) {
             if (v > lim * 0.7f) want[i] = 1;
         }
     }
-    if (!memcmp(want, held, sizeof held)) return;
+    if (!memcmp(want, held, sizeof want)) return;
     /* The game runs when the same direction key is pressed twice within 300 ms (dash). A change of direction without
      * going through neutral must never look like that, so before a repeat press a different key is tapped. */
-    static int last_key = -1; static Uint64 last_t;
+    int last_key = g_dir_last_key; Uint64 last_t = g_dir_last_t;
     int was_neutral = !(held[0] | held[1] | held[2] | held[3]), now_neutral = !(want[0] | want[1] | want[2] | want[3]);
     int adding = 1; for (int i = 0; i < 4; i++) if (held[i] && !want[i]) adding = 0;   /* only added keys: nothing to release */
     if (!adding) for (int i = 0; i < 4; i++) if (held[i]) in_key(codes[i], 0);
@@ -649,7 +654,42 @@ static void update_joystick(float ax, float ay, int digital) {
         }
         in_key(codes[i], 1); last_key = codes[i]; last_t = now;
     }
-    memcpy(held, want, sizeof held);
+    g_dir_last_key = last_key; g_dir_last_t = last_t;
+    memcpy(held, want, sizeof want);
+}
+
+/* The game starts walking only on a key *press* event. When a dash (or a map change, or a bump) drops the hero to idle (action 2)
+ * while a direction is still held, nothing would restart the walk until the key is released and pressed again. So the host
+ * re-presses the held keys after a few idle frames; a dummy tap of another key first keeps it from counting as a dash double-tap. */
+static void resume_walk(void) {
+    static int idle, cooldown;
+    int any = g_dir_held[0] | g_dir_held[1] | g_dir_held[2] | g_dir_held[3];
+    if (cooldown > 0) cooldown--;
+    if (!any || hero_state() != 0 || (int16_t)rd16(mem_r32(LIB_BASE + 0x44278) + 0x4896) != 2) { idle = 0; return; }
+    if (++idle < 3 || cooldown) return;
+    int first = -1; for (int i = 0; i < 4; i++) if (g_dir_held[i]) { if (first < 0) first = i; in_key(g_dir_codes[i], 0); }
+    int d = g_dir_codes[(first + 1) & 3]; in_key(d, 1); in_key(d, 0);
+    for (int i = 0; i < 4; i++) if (g_dir_held[i]) { in_key(g_dir_codes[i], 1); g_dir_last_key = g_dir_codes[i]; g_dir_last_t = SDL_GetTicks64(); }
+    idle = 0; cooldown = 6;
+}
+
+/* Character menu (hero state 16): the game switches tabs with Left/Right only while the cursor is on the tab row. GameUI+0x78 is the
+ * focus depth (0 = tab row, 1 = page content, 2 = popup), GameUI+0x7a is tab*4096. L/R therefore back out to the tab row first
+ * (Back never closes the menu from depth > 0) and then tap Left/Right. */
+#define KEY_LEFT   0xf
+#define KEY_RIGHT  0x10
+static int g_tab_req, g_tab_tries;
+static int g_show_fps;                  /* --fps, or hold L and click the right stick */
+static char g_perf_text[48];
+static int menu_open(void) { return hero_state() == 16; }
+static void menu_tab_step(void) {
+    if (!g_tab_req) return;
+    if (!menu_open()) { g_tab_req = g_tab_tries = 0; return; }
+    int depth = (int16_t)rd16(mem_r32(LIB_BASE + 0x441d4) + 0x78);
+    if (depth > 0 && g_tab_tries < 6) { g_tab_tries++; in_key(KEY_BACK, 1); in_key(KEY_BACK, 0); return; }
+    int k = g_tab_req < 0 ? KEY_LEFT : KEY_RIGHT;
+    in_key(k, 1); in_key(k, 0);
+    g_tab_req = g_tab_tries = 0;
 }
 
 static void pad_button(int b, int down) {
@@ -658,6 +698,7 @@ static void pad_button(int b, int down) {
     case 0: in_key(KEY_OK, down); break;          /* A: confirm / attack / talk */
     case 1: in_key(KEY_BACK, down); break;        /* B: cancel / dash / menu */
     case 6:
+        if (menu_open()) { if (down) g_tab_req = -1; break; }   /* in the character menu L/R switch tabs */
         if (down != page) {
             game_set_hotbar_page(down ? 1 : 0);
             if (down) host_vibrate_light(35);
@@ -665,23 +706,14 @@ static void pad_button(int b, int down) {
         break; /* L shoulder: Page Shift Modifier */
     case 3: if (down) game_trigger_quick_slot(page ? 5 : 0); break; /* Y: Combat Slot 1 */
     case 2: if (down) game_trigger_quick_slot(page ? 6 : 1); break; /* X: Combat Slot 2 */
-    case 7: if (down) game_trigger_quick_slot(page ? 7 : 2); break; /* R: Combat Slot 3 */
-    case 9:                                                        /* ZR: Combat Slot 4 (or pointer click in menu) */
-        if (hero_state() != 0 && g_ptr_visible && SDL_GetTicks64() - g_ptr_t < 3000) {
-            if (down) tap_press(g_ptr_x, g_ptr_y); else tap_release(g_ptr_x, g_ptr_y);
-        } else {
-            if (down) game_trigger_quick_slot(page ? 8 : 3);
-        }
-        break;
-    case 8:                                                        /* ZL: Utility Slot / Potion (or pointer click in menu) */
-        if (hero_state() != 0 && g_ptr_visible && SDL_GetTicks64() - g_ptr_t < 3000) {
-            if (down) tap_press(g_ptr_x, g_ptr_y); else tap_release(g_ptr_x, g_ptr_y);
-        } else {
-            if (down) game_trigger_quick_slot(page ? 9 : 4);
-        }
-        break;
+    case 7:
+        if (menu_open()) { if (down) g_tab_req = 1; break; }
+        if (down) game_trigger_quick_slot(page ? 7 : 2);
+        break; /* R: Combat Slot 3 */
+    case 9: if (down) game_trigger_quick_slot(page ? 8 : 3); break; /* ZR: Combat Slot 4 */
+    case 8: if (down) game_trigger_quick_slot(page ? 9 : 4); break; /* ZL: Utility Slot / Potion */
     case 4: if (down) game_trigger_quick_slot(page ? 9 : 4); break; /* LS (L3 click): quick slot 5/10 */
-    case 5: if (down) screenshot(); break;                          /* RS (R3 click): screenshot */
+    case 5: break;                                                  /* RS (R3 click): disabled */
     case 10: if (down) in_touch(0, 0, 3); break;                    /* Menu (+): save / settings */
     case 11: in_key(KEY_MAP, down); break;                          /* Minus (-): Mini Map */
     case 12: g_pad.dl = down; break; case 13: g_pad.du = down; break;
@@ -708,7 +740,7 @@ static int run_gui(const char *apk, const char *save) {
 #endif
     for (int i = 0; i < 8; i++) g_joys[i] = NULL;
     for (int i = 0; i < SDL_NumJoysticks() && i < 8; i++) g_joys[i] = SDL_JoystickOpen(i);
-    int r = game_init(); fprintf(stderr, "initGame -> %d\n", r);
+    int r = game_init(); fprintf(stderr, "initGame -> %d\n", r); economy_install();
     int quit = 0, paused = 0; unsigned nframes = 0; Uint64 run_ms = 0, worst_ms = 0, last_ic = 0, win_t0 = SDL_GetTicks64();
     while (!quit) {
         Uint64 t0 = SDL_GetTicks64();
@@ -784,47 +816,6 @@ static int run_gui(const char *apk, const char *save) {
                         break;
                     }
                 }
-            } else if (e.type == SDL_FINGERDOWN || e.type == SDL_FINGERUP || e.type == SDL_FINGERMOTION) {
-                int win_w = 1200, win_h = 720;
-                SDL_GetWindowSize(win, &win_w, &win_h);
-                float lx, ly;
-                SDL_RenderWindowToLogical(ren, (int)(e.tfinger.x * (float)win_w), (int)(e.tfinger.y * (float)win_h), &lx, &ly);
-                int gx = (int)lx, gy = (int)ly;
-                if (e.type == SDL_FINGERDOWN) {
-                    if (gx >= 0 && gx < GAME_W && gy >= 0 && gy < GAME_H) {
-                        g_ptr_visible = 0;
-                        tap_press(gx, gy);
-                    }
-                } else if (e.type == SDL_FINGERUP) {
-                    int cx = gx < 0 ? 0 : (gx >= GAME_W ? GAME_W - 1 : gx);
-                    int cy = gy < 0 ? 0 : (gy >= GAME_H ? GAME_H - 1 : gy);
-                    tap_release(cx, cy);
-                } else if (e.type == SDL_FINGERMOTION) {
-                    if (gx >= 0 && gx < GAME_W / 2 && gy >= 0 && gy < GAME_H) {
-                        in_touch(gx, gy, 2);
-                    }
-                }
-            } else if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-                if (e.button.which != SDL_TOUCH_MOUSEID) {
-                    float lx, ly; SDL_RenderWindowToLogical(ren, e.button.x, e.button.y, &lx, &ly);
-                    int gx = (int)lx, gy = (int)ly;
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        if (gx >= 0 && gx < GAME_W && gy >= 0 && gy < GAME_H) {
-                            g_ptr_visible = 0;
-                            tap_press(gx, gy);
-                        }
-                    } else {
-                        int cx = gx < 0 ? 0 : (gx >= GAME_W ? GAME_W - 1 : gx);
-                        int cy = gy < 0 ? 0 : (gy >= GAME_H ? GAME_H - 1 : gy);
-                        tap_release(cx, cy);
-                    }
-                }
-            } else if (e.type == SDL_MOUSEMOTION) {
-                if (e.motion.which != SDL_TOUCH_MOUSEID && (e.motion.state & SDL_BUTTON_LMASK)) {
-                    float lx, ly; SDL_RenderWindowToLogical(ren, e.motion.x, e.motion.y, &lx, &ly);
-                    int gx = (int)lx, gy = (int)ly;
-                    if (gx >= 0 && gx < GAME_W / 2 && gy >= 0 && gy < GAME_H) in_touch(gx, gy, 2);
-                }
             }
         }
         /* analogue sticks: first pad that reports anything */
@@ -837,16 +828,6 @@ static int run_gui(const char *apk, const char *save) {
         int dpad = g_pad.dr || g_pad.dl || g_pad.du || g_pad.dd;
         if (dpad) update_joystick((float)(g_pad.dr - g_pad.dl), (float)(g_pad.dd - g_pad.du), 1);   /* D-pad wins over the stick */
         else update_joystick(g_pad.lx, g_pad.ly, 0);
-        if (g_pad.rx * g_pad.rx + g_pad.ry * g_pad.ry > 0.2f * 0.2f) {          /* pointer */
-            g_ptr_x += (int)(g_pad.rx * 6);
-            g_ptr_y += (int)(g_pad.ry * 6);
-            if (g_ptr_x < 0) g_ptr_x = 0;
-            if (g_ptr_x > GAME_W - 1) g_ptr_x = GAME_W - 1;
-            if (g_ptr_y < 0) g_ptr_y = 0;
-            if (g_ptr_y > GAME_H - 1) g_ptr_y = GAME_H - 1;
-            g_ptr_visible = 1;
-            g_ptr_t = SDL_GetTicks64();
-        }
         if (paused) { SDL_Delay(50); continue; }
 #ifdef __SWITCH__
         if (g_vib_active && SDL_GetTicks64() >= g_vib_stop_t) {
@@ -854,27 +835,37 @@ static int run_gui(const char *apk, const char *save) {
         }
 #endif
         Uint64 g0 = SDL_GetTicks64();
-        int delay = game_run(); g_frame_no++;
-        { static uint32_t last_scr = 1; uint32_t sc = screen_id(); if (sc != last_scr) { fprintf(stderr, "[screen] f%u 0x%x -> 0x%x delay=%d\n", g_frame_no, last_scr, sc, delay); last_scr = sc; fflush(stderr); } }
-        Uint64 gms = SDL_GetTicks64() - g0; run_ms += gms; if (gms > worst_ms) worst_ms = gms;
+        int delay = game_run(); g_frame_no++; resume_walk(); menu_tab_step(); economy_step();
+        if (getenv("DEBUG")) {
+            static uint32_t last_scr = 1; uint32_t sc = screen_id();
+            if (sc != last_scr) { fprintf(stderr, "[screen] f%u 0x%x -> 0x%x delay=%d\n", g_frame_no, last_scr, sc, delay); last_scr = sc; fflush(stderr); }
+        }
+        Uint64 gms = SDL_GetTicks64() - g0;
+        if (g_show_fps || getenv("PERF")) {   /* frame statistics: presented frames per second, game time per frame, worst frame */
+            static Uint64 pf_t0, pf_ic0; static unsigned pf_n; static Uint64 pf_sum, pf_worst;
+            Uint64 ic = game_icount();
+            if (getenv("PERF") && gms >= 25) { fprintf(stderr, "[slow] f%u game=%llums instr=%.2fM screen=0x%x hero_state=%d\n", g_frame_no, (unsigned long long)gms, (double)(ic - pf_ic0) / 1e6, screen_id(), hero_state()); fflush(stderr); }
+            pf_ic0 = ic; pf_n++; pf_sum += gms; if (gms > pf_worst) pf_worst = gms;
+            Uint64 now = SDL_GetTicks64(); if (!pf_t0) pf_t0 = now;
+            if (now - pf_t0 >= 1000) {
+                snprintf(g_perf_text, sizeof g_perf_text, "FPS %u G %llu MAX %llu", (unsigned)((uint64_t)pf_n * 1000 / (now - pf_t0)), (unsigned long long)(pf_sum / pf_n), (unsigned long long)pf_worst);
+                if (getenv("PERF")) { fprintf(stderr, "[fps] %s\n", g_perf_text); fflush(stderr); }
+                pf_t0 = now; pf_n = 0; pf_sum = pf_worst = 0;
+            }
+        }
         if (getenv("PERF") && ++nframes % 120 == 0) {          /* performance line for the log */
             Uint64 ic = game_icount(), wall = SDL_GetTicks64() - win_t0;
-            fprintf(stderr, "[perf] ptr=%d,%d screen=0x%x delay=%d\n", g_ptr_x, g_ptr_y, screen_id(), delay);
+            fprintf(stderr, "[perf] screen=0x%x delay=%d\n", screen_id(), delay);
             fprintf(stderr, "[perf] %u frames: game %.1f ms/frame avg, %llu ms worst, wall %.1f ms/frame, %.1f guest MIPS\n",
                     nframes, (double)run_ms / 120.0, (unsigned long long)worst_ms, (double)wall / 120.0,
                     (double)(ic - last_ic) / 1e3 / (double)(run_ms ? run_ms : 1));
             fflush(stderr); run_ms = worst_ms = 0; last_ic = ic; win_t0 = SDL_GetTicks64();
         }
         if (delay == 0) break;
-        if (hero_state() == 0) native_draw_hotbar_overlay(game_frame_ptr());
+        if (hero_state() == 0) { native_draw_hotbar_overlay(game_frame_ptr()); native_draw_title_overlay(game_frame_ptr()); }
+        if (g_show_fps && g_perf_text[0]) native_draw_perf_overlay(game_frame_ptr(), g_perf_text);
         SDL_UpdateTexture(tex, NULL, game_frame(), GAME_W * 2);
         SDL_RenderClear(ren); SDL_RenderCopy(ren, tex, NULL, NULL);
-        if (g_ptr_visible && SDL_GetTicks64() - g_ptr_t < 3000) {               /* pointer overlay */
-            SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
-            SDL_RenderDrawLine(ren, g_ptr_x - 5, g_ptr_y, g_ptr_x + 5, g_ptr_y); SDL_RenderDrawLine(ren, g_ptr_x, g_ptr_y - 5, g_ptr_x, g_ptr_y + 5);
-            SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
-            SDL_RenderDrawLine(ren, g_ptr_x - 4, g_ptr_y, g_ptr_x + 4, g_ptr_y); SDL_RenderDrawLine(ren, g_ptr_x, g_ptr_y - 4, g_ptr_x, g_ptr_y + 4);
-        }
         SDL_RenderPresent(ren);
         Uint64 used = SDL_GetTicks64() - t0;
         if (delay == 1000) delay = 100;
@@ -911,6 +902,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--trace") && i + 1 < argc) trace = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--profile") && i + 1 < argc) profile = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--skip-check")) g_skip_check = 1;
+        else if (!strcmp(argv[i], "--fps")) g_show_fps = 1;
         else if (!strcmp(argv[i], "--tour") && i + 1 < argc) { tour_dir = argv[++i]; }
         else if (!strcmp(argv[i], "--portals")) do_portals = 1;
         else if (!strcmp(argv[i], "--scripts")) do_scripts = 1;

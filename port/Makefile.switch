@@ -11,7 +11,7 @@ SRC      := src/cpu.c src/hle.c src/native.c src/apk.c src/sha256.c src/audio.c 
 OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(SRC))
 APP_TITLE   := Destinia
 APP_AUTHOR  := GAMEVIL / Clean-room
-APP_VERSION := 0.7.3
+APP_VERSION := 1.0.0
 ICON        := icon.jpg
 
 SDL2CONF := $(PORTLIBS)/bin/sdl2-config
@@ -35,6 +35,7 @@ $(TARGET).elf: $(OBJ)
 
 $(TARGET).nacp:
 	nacptool --create "$(APP_TITLE)" "$(APP_AUTHOR)" "$(APP_VERSION)" $@
+	python3 -c "f=open('$@','r+b'); f.seek(0x3035); f.write(b'\x02'); f.close()"
 
 $(TARGET).nro: $(TARGET).elf $(TARGET).nacp $(ICON)
 	elf2nro $< $@ --nacp=$(TARGET).nacp --icon=$(ICON)

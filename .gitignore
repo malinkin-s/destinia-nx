@@ -45,6 +45,7 @@ staging_forwarder/
 out_nsp/
 
 # Scratch, research, dumps and decompilation artifacts
+album/
 work/
 ref/
 hacbrewpack_backup/

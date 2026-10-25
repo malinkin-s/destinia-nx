@@ -172,6 +172,103 @@ static int n_screen16(Cpu *c) {
     return 1;
 }
 
+/* _Grp_drawDodgeCol16: _Grp_drawDodge16 against a constant colour (Grp+0x70) instead of the destination pixel; the result is stored. */
+static int n_dodgecol16(Cpu *c) {
+    Blit b = blit_args(c);
+    if ((int32_t)b.rows <= 0) return 1;
+    uint32_t key = GRP_KEY(V.Grp), mR = G32(V.maxR), mG = G32(V.maxG), mB = G32(V.maxB), col = *(u16 *)HP(V.Grp + 0x70);
+    const uint8_t *src = HP(b.src); const u16 *pal = (const u16 *)HP(b.pal);
+    uint8_t *dst = HP(b.dst); int32_t step = (int32_t)b.col_step * 2;
+    for (int32_t y = 0; y < (int32_t)b.rows; y++) {
+        if ((int32_t)b.w > 0) {
+            for (int32_t x = 0; x < (int32_t)b.w; x++, dst += step) {
+                uint32_t p = pal[src[x]];
+                if (p == key) continue;
+                uint32_t r = (p & mR) + (col & mR); if ((int32_t)r > (int32_t)mR) r = mR;
+                uint32_t g = (p & mG) + (col & mG); if ((int32_t)g > (int32_t)mG) g = mG;
+                uint32_t bl = (p & mB) + (col & mB); if ((int32_t)bl > (int32_t)mB) bl = mB;
+                *(u16 *)dst = (uint16_t)(g | r | bl);
+            }
+            src += b.w;
+        }
+        if (y + 1 == (int32_t)b.rows) break;
+        dst += (int32_t)b.row_skip * 2; src += (int32_t)b.src_skip;
+    }
+    return 1;
+}
+
+/* _Grp_drawAura16: for opaque source pixels strictly inside the sprite (not on its first/last row or column) copy the destination
+ * pixel at a neighbour offset over the pixel itself. The offset is derived from Grp+0x5c (the framebuffer stride in pixels)
+ * and the signs of the column step / row skip: it selects which neighbour the "aura" smears from. */
+static int n_aura16(Cpu *c) {
+    Blit b = blit_args(c);
+    int32_t rows = (int32_t)b.rows, w = (int32_t)b.w, cs = (int32_t)b.col_step, rs = (int32_t)b.row_skip;
+    uint32_t H = *(u16 *)HP(V.Grp + 0x5c), off;
+    int32_t pos = cs > 0;
+    if (rs > 0)       off = pos ? H - 1 : (cs < 0 ? H + 1 : ~H);
+    else if (rs == 0) off = ~H;
+    else              off = pos ? 1 - H : ~H;
+    int32_t off2 = (int32_t)(int16_t)(uint16_t)off * 2;
+    if (rows <= 0) return 1;
+    uint32_t key = GRP_KEY(V.Grp);
+    const uint8_t *src = HP(b.src); const u16 *pal = (const u16 *)HP(b.pal);
+    uint32_t dstg = b.dst;
+    for (int32_t y = 0; y < rows; y++) {
+        if (w > 0) {
+            for (int32_t x = 0; x < w; x++) {
+                if (y != 0 && x > 0 && rows - 1 > y && w - 1 > x) {
+                    uint32_t p = pal[src[x]];
+                    if (p != key) { uint8_t *d = HP(dstg + (uint32_t)(x * cs * 2)); *(u16 *)d = *(u16 *)HP(dstg + (uint32_t)(x * cs * 2) + (uint32_t)off2); }
+                }
+            }
+            dstg += (uint32_t)(w * cs * 2); src += w;
+        }
+        if (y + 1 == rows) break;
+        src += (int32_t)b.src_skip; dstg += (uint32_t)(rs * 2);
+    }
+    return 1;
+}
+
+/* Grp_closeupScreen2(handle, zoom): in-place "zoom to the centre" of a 16-bit framebuffer, done as four mirrored quadrants.
+ * Each of the (H+1)/2 rows writes (W+1)/2 pixels into every corner, reading from the (already partly rewritten) framebuffer at
+ * 10.6 fixed-point positions that advance by q = 4096/zoom per step. The writes of one iteration are done in the guest's order
+ * because the quadrants overlap in the middle row/column of odd sizes. Anything unusual (bpp != 16, indices out of the
+ * framebuffer) is declined so the guest code runs instead. */
+static uint32_t fb_desc_for(uint32_t h) { return h > 4 ? 0 : G32(V.frameBuffer + h * 4); }
+static int n_closeup2(Cpu *c) {
+    uint32_t h = c->r[0]; int32_t prm = (int32_t)c->r[1];
+    uint32_t desc = fb_desc_for(h);
+    if (!desc) return 0;
+    int32_t W = (int32_t)(h == 0 ? G32(V.mainScreenWidth) : G32(desc)), H = (int32_t)(h == 0 ? G32(V.mainScreenHeight) : G32(desc + 4)); uint32_t fbg = G32(desc + 8);
+    if (G32(V.Grp + 0x48) != 16) return 1;
+    if (W <= 0 || H <= 0 || !fbg) return 0;
+    int32_t halfRows = H % 2 + H / 2, halfW = W % 2 + W / 2;
+    int32_t q = prm == 0 ? 0 : (prm == -1 ? -4096 : 4096 / prm);
+    int32_t t = halfW - 1, A = t - ((int32_t)((uint32_t)q * (uint32_t)t) >> 6);
+    int32_t r3 = halfRows - 1, B = r3 - ((int32_t)((uint32_t)q * (uint32_t)r3) >> 6);
+    int32_t X1 = B * 64, X2 = (H - 1 - B) * 64, Y1 = (W - 1 - A) * 64, Y2 = A * 64;
+    int64_t lastR = halfRows - 1, lastK = halfW - 1;                    /* every index is monotone in i / k: check the ends */
+    int64_t rt0 = X1 >> 6, rt1 = ((int64_t)X1 + lastR * q) >> 6, rb0 = X2 >> 6, rb1 = ((int64_t)X2 - lastR * q) >> 6;
+    int64_t ca0 = Y2 >> 6, ca1 = ((int64_t)Y2 + lastK * q) >> 6, cb0 = Y1 >> 6, cb1 = ((int64_t)Y1 - lastK * q) >> 6;
+    if (rt0 < 0 || rt0 >= H || rt1 < 0 || rt1 >= H || rb0 < 0 || rb0 >= H || rb1 < 0 || rb1 >= H) return 0;
+    if (ca0 < 0 || ca0 >= W || ca1 < 0 || ca1 >= W || cb0 < 0 || cb0 >= W || cb1 < 0 || cb1 >= W) return 0;
+    u16 *fb = (u16 *)HP(fbg);
+    for (int32_t i = 0; i < halfRows; i++) {
+        int32_t rowTop = W * (X1 >> 6), rowBot = W * (X2 >> 6);
+        int32_t ya = Y2, yb = Y1;
+        for (int32_t k = 0; k < halfW; k++) {
+            int32_t ca = ya >> 6; ya += q;
+            fb[i * W + k] = fb[rowTop + ca];
+            fb[(H - 1 - i) * W + k] = fb[rowBot + ca];
+            int32_t cb = yb >> 6; yb -= q;
+            fb[i * W + (W - 1) - k] = fb[rowTop + cb];
+            fb[(H - i) * W - 1 - k] = fb[rowBot + cb];
+        }
+        X1 += q; X2 -= q;
+    }
+    return 1;
+}
+
 static inline uint16_t pxlmultiply(uint16_t c0, uint16_t c1) {
     uint32_t mkR = G32(V.maskR), mkG = G32(V.maskG), mkB = G32(V.maskB);
     uint32_t shR = G32(V.shiftR), shG = G32(V.shiftG);
@@ -477,6 +574,9 @@ static const NativeDef DEFS[] = {
     {"_Grp_pxlMultiply", 0, 0, n_pxlmultiply, 1},
     {"_Grp_drawDodge16", 0, 0, n_dodge16, 0},
     {"_Grp_drawScreen16", 0, 0, n_screen16, 0},
+    {"_Grp_drawDodgeCol16", 0, 0, n_dodgecol16, 0},
+    {"_Grp_drawAura16", 0, 0, n_aura16, 0},
+    {"Grp_closeupScreen2", 0, 0, n_closeup2, 0},
     {"_Grp_drawMultiply16", 0, 0, n_drawmultiply16, 0},
     {"_Grp_drawAlpMultiply16", 0, 0, n_drawalpmultiply16, 0},
     {"Grp_drawClipWImageP:blit", 0xbd5a, 0xbc8c, n_clipw, 0},
@@ -543,6 +643,9 @@ static int p_draw_quick_slot(Cpu *c) {
             mem_write(ui_table + 282 + i * 8, &new_coords[i][0], 2);
             mem_write(ui_table + 282 + i * 8 + 2, &new_coords[i][1], 2);
         }
+        int16_t offscreen = 999;
+        mem_write(ui_table + 322, &offscreen, 2); /* hide on-screen page switch button */
+        mem_write(ui_table + 324, &offscreen, 2);
     }
     uint32_t canvas = mem_r32(LIB_BASE + 0x44278);
     if (canvas) {
@@ -660,11 +763,158 @@ void native_draw_hotbar_overlay(uint16_t *fb) {
     }
 }
 
+/* Title menu (MenuCanvas, state 1: START / MULTI MODE / OPTION / HELP / INFO). The game keeps the key-driven selection in
+ * menu->+0xcc but draws nothing for it (it is touch-first), so for gamepad play the host marks the selected entry. */
+static uint16_t blend565(uint16_t a, uint16_t b, int alpha /* 0..256 of b */) {
+    int ar = a >> 11, ag = (a >> 5) & 63, ab = a & 31, br = b >> 11, bg = (b >> 5) & 63, bb = b & 31;
+    return (uint16_t)((((ar * (256 - alpha) + br * alpha) >> 8) << 11) | (((ag * (256 - alpha) + bg * alpha) >> 8) << 5) | ((ab * (256 - alpha) + bb * alpha) >> 8));
+}
+void native_draw_title_overlay(uint16_t *fb) {
+    if (!fb) return;
+    uint32_t scr = mem_r32(LIB_BASE + 0x44240), menu = mem_r32(LIB_BASE + 0x4439c);
+    if (!scr || !menu || mem_r32(scr) != LIB_BASE + 0x77788) return;
+    int32_t state = (int32_t)mem_r32(menu + 0x9c), idx = (int32_t)mem_r32(menu + 0xcc);
+    if (state != 1 || idx < 0 || idx > 4) return;
+    static const int cy[5] = {68, 103, 140, 175, 211}, hw[5] = {50, 82, 58, 42, 42};   /* centre row, half width of each label */
+    const uint16_t GOLD = 0xFEC7, DARK = 0x0000;
+    int x0 = 200 - hw[idx], x1 = 200 + hw[idx], y0 = cy[idx] - 15, y1 = cy[idx] + 15;
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
+        uint16_t *px = &fb[y * GAME_W + x];
+        int edge = (y <= y0 + 1 || y >= y1 - 1 || x <= x0 + 1 || x >= x1 - 1);
+        *px = edge ? GOLD : blend565(*px, DARK, 90);
+    }
+    for (int i = 0; i < 9; i++) for (int j = -i; j <= i; j++) {        /* arrows pointing at the entry from both sides */
+        int ly = cy[idx] + j, lx = x0 - 14 + (8 - i) , rx = x1 + 14 - (8 - i);
+        if (lx >= 0 && lx < GAME_W) fb[ly * GAME_W + lx] = GOLD;
+        if (rx >= 0 && rx < GAME_W) fb[ly * GAME_W + rx] = GOLD;
+    }
+}
+
+/* Performance readout ("FPS 60 G 9 MAX 31"): 3x5 font for digits and the few letters it needs. */
+static const uint8_t PF_DIGITS[10][5] = {{7,5,5,5,7},{2,6,2,2,7},{7,1,7,4,7},{7,1,7,1,7},{5,5,7,1,1},{7,4,7,1,7},{7,4,7,5,7},{7,1,1,1,1},{7,5,7,5,7},{7,5,7,1,7}};
+static const uint8_t PF_F[5] = {7,4,6,4,4}, PF_P[5] = {6,5,6,4,4}, PF_S[5] = {7,4,7,1,7}, PF_M[5] = {5,7,7,5,5}, PF_A[5] = {2,5,7,5,5}, PF_X[5] = {5,5,2,5,5}, PF_G[5] = {7,4,5,5,7};
+static void pf_char(uint16_t *fb, int x, int y, char c, uint16_t col) {
+    const uint8_t *g = 0;
+    if (c >= '0' && c <= '9') g = PF_DIGITS[c - '0'];
+    else switch (c) { case 'F': g = PF_F; break; case 'P': g = PF_P; break; case 'S': g = PF_S; break; case 'M': g = PF_M; break;
+                      case 'A': g = PF_A; break; case 'X': g = PF_X; break; case 'G': g = PF_G; break; default: return; }
+    for (int r = 0; r < 5; r++) for (int cx = 0; cx < 3; cx++) if ((g[r] >> (2 - cx)) & 1) {
+        int px = x + cx, py = y + r; if (px >= 0 && px < GAME_W && py >= 0 && py < GAME_H) fb[py * GAME_W + px] = col; }
+}
+void native_draw_perf_overlay(uint16_t *fb, const char *text) {
+    if (!fb || !text) return;
+    int len = 0; while (text[len]) len++;
+    for (int y = 1; y < 9; y++) for (int x = 1; x < len * 4 + 4; x++) fb[y * GAME_W + x] = blend565(fb[y * GAME_W + x], 0x0000, 200);
+    for (int i = 0; i < len; i++) pf_char(fb, 3 + i * 4, 3, text[i], 0xFFFF);
+}
+
+/* ------------------------------------------------------------------ economy
+ * The original sells "Coins" (the premium currency) for real money through Google Play. Here the Special Shop sells them for
+ * Gold instead: the six price tiers keep the original coin amounts and "% MORE" bonuses but are priced in Gold, and the
+ * Resurrection-Scroll pack offered on the death screen is bought with Gold too. Nothing touches the network.
+ *   - gametxt_en.tdt: every sentence that talks about dollars/charging is rewritten when the asset is read (the APK is not modified);
+ *   - the "$%d.%d" price format and the CASH_RATIO price column are patched in guest memory after init;
+ *   - Comm_buyCash (the IAP request) is replaced: it records the purchase and economy_step() settles it a frame later.
+ * Prices: 1 base coin = ECON_GOLD_PER_COIN gold, before the volume bonus (see docs/economy.md). */
+#define ECON_GOLD_PER_COIN   2                                   /* gold per coin of the bonus-less base amount */
+#define ECON_REVIVE_GOLD     2000                                /* Resurrection Scroll + 800 Coins pack */
+static const int ECON_BASE_COINS[6] = {100000, 50000, 30000, 10000, 5000, 1000};   /* CASH_RATIO rows, biggest first */
+static int econ_tier_gold(int t) { return ECON_BASE_COINS[t] * ECON_GOLD_PER_COIN; }
+
+static const struct { const char *from, *to; } ECON_TEXT[] = {
+    {"$%d.%d will be charged to purchase %d Coins.", "%d%.0d Gold will be spent to buy %d Coins."},
+    {"$%d.%d will be charged.  (It may take a while to process your request, so please do not terminate the game in the meantime.)", "%d%.0d Gold will be spent."},
+    {"$1.99 will be charged upon upgrading to the full version. Do you want to purchase the full version and continue playing the game?", "Do you want to unlock the full version and continue playing the game?"},
+    {"$1.99 (Upgrade to full version)", "Upgrade to full version"},
+    {"4000\xbf\xf8( (Upgrade to full version)", "Upgrade to full version"},
+    {"You do not have a Resurrection Scroll. Do you want to purchase a Resurrection Scroll and 800 Coins?", "You have no Resurrection Scroll. Buy a Resurrection Scroll and 800 Coins for 2,000 Gold?"},
+    {"You do not have a Resurrection Scroll. Do you want to purchase a Resurrection Scroll and 20 Coins?", "You have no Resurrection Scroll. Buy a Resurrection Scroll and 20 Coins for 2,000 Gold?"},
+    {"You need Coins to use the Special Shop.", "Exchange Gold for Coins to use the Special Shop."},
+};
+/* gametxt_*en.tdt: u16 record count, u16 version, then {u16 length, bytes}. Returns a malloc'd replacement (or the input). */
+uint8_t *economy_patch_asset(const char *name, uint8_t *data, size_t *len) {
+    if (!data || !name || strncmp(name, "gametxt", 7) || !strstr(name, "_en.tdt") || *len < 4) return data;
+    size_t cap = *len + 1024, o = 4, w = 4; uint8_t *out = (uint8_t *)malloc(cap); int changed = 0;
+    memcpy(out, data, 4);
+    while (o + 2 <= *len) {
+        size_t l = (size_t)(data[o] | data[o + 1] << 8); o += 2;
+        if (o + l > *len) { free(out); return data; }
+        const char *to = NULL;
+        for (size_t i = 0; i < sizeof ECON_TEXT / sizeof *ECON_TEXT; i++)
+            if (strlen(ECON_TEXT[i].from) == l && !memcmp(ECON_TEXT[i].from, data + o, l)) { to = ECON_TEXT[i].to; break; }
+        size_t nl = to ? strlen(to) : l; const uint8_t *src = to ? (const uint8_t *)to : data + o;
+        if (w + 2 + nl > cap) { cap = (w + 2 + nl) * 2; out = (uint8_t *)realloc(out, cap); }
+        out[w] = (uint8_t)nl; out[w + 1] = (uint8_t)(nl >> 8); memcpy(out + w + 2, src, nl); w += 2 + nl; o += l; changed |= to != NULL;
+    }
+    if (!changed) { free(out); return data; }
+    free(data); *len = w; return out;
+}
+
+/* After game_init: price column of CASH_RATIO in Gold (x100: the game prints value/100 with the patched "%d G" format). */
+void economy_install(void) {
+    for (int t = 0; t < 6; t++) S32(LIB_BASE + 0x44fc8 + (uint32_t)t * 8 + 4, (uint32_t)econ_tier_gold(t) * 100u);
+    uint32_t span = guest_lib_span();
+    for (uint32_t a = LIB_BASE; a + 7 <= LIB_BASE + span; a++)
+        if (!memcmp(HP(a), "$%d.%d", 7)) { memcpy(HP(a), "%d G\0\0\0", 7); }
+}
+
+static struct { int kind, tier; } g_buy;          /* 1 = Special Shop tier, 2 = death-screen revive pack */
+static int g_buy_msg_swapped;
+#define ECON_MSG_OK  "You have purchased Coins."
+#define ECON_MSG_NO  "Not enough Gold."
+/* The "purchased" popup is the only message popup that is safe to open from the tier list, so a refused purchase reuses it with
+ * different text: every copy of the sentence in guest memory is overwritten and put back once the popup is gone. */
+static void econ_swap_msg(int to_no) {          /* text records have no terminator: swap in place, same length, space padded */
+    size_t n = strlen(ECON_MSG_OK); char pad[64]; memset(pad, ' ', n); memcpy(pad, ECON_MSG_NO, strlen(ECON_MSG_NO)); pad[n] = 0;
+    const char *from = to_no ? ECON_MSG_OK : pad, *to = to_no ? pad : ECON_MSG_OK;
+    for (int rg = 0; rg < 2; rg++) {            /* the sentence exists in the text table (heap) and in the library's rodata */
+        uint32_t base = rg ? HEAP_BASE : LIB_BASE, hn = rg ? guest_heap_end() - HEAP_BASE : guest_lib_span(); uint8_t *h = HP(base);
+        for (uint32_t i = 0; i + n <= hn; i++) if (h[i] == (uint8_t)from[0] && !memcmp(h + i, from, n)) memcpy(h + i, to, n);
+    }
+    g_buy_msg_swapped = to_no;
+}
+static int p_buy_cash(Cpu *c) {
+    uint32_t lr = c->r[14] & ~1u, arg = c->r[0];
+    if (lr >= LIB_BASE + 0x20159 && lr < LIB_BASE + 0x21065) { if (arg == 6) { g_buy.kind = 2; g_buy.tier = 6; } }
+    else if (lr >= LIB_BASE + 0x35dbd && lr < LIB_BASE + 0x35dbd + 31168) { if (arg < 6) { g_buy.kind = 1; g_buy.tier = (int)arg; } }
+    c->r[15] = c->r[14] & ~1u; return 1;                 /* no network: the purchase is settled by economy_step() */
+}
+void economy_step(void) {
+    uint32_t menu = mem_r32(LIB_BASE + 0x441d4);
+    if (!menu) return;
+    if (g_buy_msg_swapped && mem_r32(menu + 0x7c) != 0x81100004) econ_swap_msg(0);    /* popup closed: restore the text */
+    if (!g_buy.kind) return;
+    int kind = g_buy.kind, tier = g_buy.tier; g_buy.kind = 0;
+    uint32_t gold = game_call("getMyGold", 0, NULL);
+    if (kind == 2) {
+        /* Revive on death: full Revive Pack costs 2000 Gold (gives 800 Coins + instant revive).
+         * If the player has less than 2000 Gold, charge an emergency fee (min(gold, 200)) and
+         * still revive them immediately, so the player is never locked out with 0 response. */
+        uint32_t cost = gold >= ECON_REVIVE_GOLD ? ECON_REVIVE_GOLD : (gold >= 200 ? 200 : gold);
+        uint32_t coins = (gold >= ECON_REVIVE_GOLD) ? 800 : 0;
+        uint32_t a[1];
+        a[0] = gold >= cost ? gold - cost : 0; game_call("setMyGold", 1, a);
+        if (coins) { a[0] = game_call("getMyCash", 0, NULL) + coins; game_call("setMyCash", 1, a); }
+        game_call("MMain_SaveData", 0, NULL);
+        game_call("GameCanvas_setHeroRevive", 0, NULL);
+        return;
+    }
+    uint32_t cost = (uint32_t)econ_tier_gold(tier);
+    uint32_t coins = mem_r32(LIB_BASE + 0x44fc8 + (uint32_t)tier * 8);
+    if (gold < cost) { econ_swap_msg(1); mem_w32(menu + 0x7c, 0x81100004); return; }
+    uint32_t a[1];
+    a[0] = gold - cost; game_call("setMyGold", 1, a);
+    a[0] = game_call("getMyCash", 0, NULL) + coins; game_call("setMyCash", 1, a);
+    game_call("MMain_SaveData", 0, NULL);
+    mem_w32(menu + 0x7c, 0x81100004);      /* "You have purchased Coins." */
+}
+
 typedef struct { const char *name; native_fn fn; } PatchDef;
 static const PatchDef PATCHES[] = {
     {"MMain_drawTouchButton", p_hide_pad},
     {"GameUI_drawStatus", p_draw_status},
     {"GameUI_drawQuickSlot", p_draw_quick_slot},
+    {"Comm_buyCash", p_buy_cash},
 };
 #define NPATCHES ((int)(sizeof PATCHES / sizeof *PATCHES))
 

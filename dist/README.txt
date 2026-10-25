@@ -1,4 +1,4 @@
-Destinia for Nintendo Switch -- 0.7.3
+Destinia for Nintendo Switch -- 1.0.0
 
 Installation:
   1. Copy destinia.nro to      sdmc:/switch/destinia/destinia.nro

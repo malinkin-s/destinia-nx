@@ -2,7 +2,7 @@
 # Build the release zip: NRO + README + licences. Contains NO game data (the player supplies the APK).
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-VER=${1:-0.7.0}
+VER=${1:-1.0.0}
 "$ROOT/tools/build_switch.sh"
 OUT=$ROOT/dist/destinia-switch-$VER; rm -rf "$OUT" "$OUT.zip"
 mkdir -p "$OUT/switch/destinia"

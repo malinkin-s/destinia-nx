@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="74" viewBox="0 0 820 74" role="img" aria-label="status: 1.0.0 · production release · rock-solid 60 FPS · platform: Nintendo Switch (homebrew) · engine: ARMv5 HLE · C99 · license: MIT">
+  <title>status: 1.0.0 · production release · rock-solid 60 FPS · platform: Nintendo Switch (homebrew) · engine: ARMv5 HLE · C99 · license: MIT</title>
+  <g font-family="'IBM Plex Sans','Segoe UI',Helvetica,Arial,sans-serif" font-size="16">
+  <rect x="0.0" y="0" width="75" height="32" fill="#1C2024"/>
+  <rect x="75.0" y="0" width="745.0" height="32" fill="#5CA382"/>
+  <text x="14.0" y="21.6" fill="#E6E1D3" textLength="47" lengthAdjust="spacingAndGlyphs">status</text>
+  <text x="447.5" y="21.6" fill="#14171A" font-weight="700" text-anchor="middle" textLength="420" lengthAdjust="spacingAndGlyphs">1.0.0 · production release · rock-solid 60 FPS</text>
+  <rect x="0.0" y="42" width="95" height="32" fill="#1C2024"/>
+  <rect x="95.0" y="42" width="270.0" height="32" fill="#7FA0B4"/>
+  <text x="14.0" y="63.6" fill="#E6E1D3" textLength="67" lengthAdjust="spacingAndGlyphs">platform</text>
+  <text x="230.0" y="63.6" fill="#14171A" font-weight="700" text-anchor="middle" textLength="240" lengthAdjust="spacingAndGlyphs">Nintendo Switch (homebrew)</text>
+  <rect x="375.0" y="42" width="85" height="32" fill="#1C2024"/>
+  <rect x="460.0" y="42" width="180.0" height="32" fill="#7FA0B4"/>
+  <text x="390.0" y="63.6" fill="#E6E1D3" textLength="55" lengthAdjust="spacingAndGlyphs">engine</text>
+  <text x="550.0" y="63.6" fill="#14171A" font-weight="700" text-anchor="middle" textLength="155" lengthAdjust="spacingAndGlyphs">ARMv5 HLE · C99</text>
+  <rect x="650.0" y="42" width="81" height="32" fill="#1C2024"/>
+  <rect x="731.0" y="42" width="89.0" height="32" fill="#C2AC63"/>
+  <text x="664.0" y="63.6" fill="#E6E1D3" textLength="53" lengthAdjust="spacingAndGlyphs">license</text>
+  <text x="775.5" y="63.6" fill="#14171A" font-weight="700" text-anchor="middle" textLength="60" lengthAdjust="spacingAndGlyphs">MIT</text>
+  </g>
+</svg>
