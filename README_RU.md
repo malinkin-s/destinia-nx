@@ -48,36 +48,20 @@
 
 <table>
   <tr>
-    <td><img src="docs/media/switch_title.jpg" alt="Титульный экран"></td>
-    <td><img src="docs/media/switch_menu.jpg" alt="Выбор режима"></td>
+    <td><img src="docs/media/switch_title.jpg" alt="Скриншот"></td>
+    <td><img src="docs/media/switch_menu.jpg" alt="Скриншот"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Титульный экран</sub></td>
-    <td align="center"><sub>Меню выбора режима</sub></td>
+    <td><img src="docs/media/switch_combat_action.jpg" alt="Скриншот"></td>
+    <td><img src="docs/media/switch_combat_field.jpg" alt="Скриншот"></td>
   </tr>
   <tr>
-    <td><img src="docs/media/switch_combat_action.jpg" alt="Бой с новым HUD"></td>
-    <td><img src="docs/media/switch_combat_field.jpg" alt="Сражение в поле"></td>
+    <td><img src="docs/media/switch_field.jpg" alt="Скриншот"></td>
+    <td><img src="docs/media/switch_dungeon.jpg" alt="Скриншот"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Бой с консольным хотбаром</sub></td>
-    <td align="center"><sub>Полевой бой</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/switch_field.jpg" alt="Исследование мира"></td>
-    <td><img src="docs/media/switch_dungeon.jpg" alt="Подземелье"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Исследование мира</sub></td>
-    <td align="center"><sub>Подземелье</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/switch_dialogue.jpg" alt="Сюжетный диалог"></td>
-    <td><img src="docs/media/switch_status_menu.jpg" alt="Меню персонажа"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Сюжетный диалог</sub></td>
-    <td align="center"><sub>Характеристики и экипировка</sub></td>
+    <td><img src="docs/media/switch_dialogue.jpg" alt="Скриншот"></td>
+    <td><img src="docs/media/switch_status_menu.jpg" alt="Скриншот"></td>
   </tr>
 </table>
 

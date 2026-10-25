@@ -48,36 +48,20 @@ Captured directly on a Nintendo Switch (640×360), version 1.0.0.
 
 <table>
   <tr>
-    <td><img src="docs/media/switch_title.jpg" alt="Title screen"></td>
-    <td><img src="docs/media/switch_menu.jpg" alt="Mode select menu"></td>
+    <td><img src="docs/media/switch_title.jpg" alt="Screenshot"></td>
+    <td><img src="docs/media/switch_menu.jpg" alt="Screenshot"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Title screen</sub></td>
-    <td align="center"><sub>Mode select menu</sub></td>
+    <td><img src="docs/media/switch_combat_action.jpg" alt="Screenshot"></td>
+    <td><img src="docs/media/switch_combat_field.jpg" alt="Screenshot"></td>
   </tr>
   <tr>
-    <td><img src="docs/media/switch_combat_action.jpg" alt="Combat with console HUD"></td>
-    <td><img src="docs/media/switch_combat_field.jpg" alt="Combat in the field"></td>
+    <td><img src="docs/media/switch_field.jpg" alt="Screenshot"></td>
+    <td><img src="docs/media/switch_dungeon.jpg" alt="Screenshot"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Combat with console hotbar</sub></td>
-    <td align="center"><sub>Field battle</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/switch_field.jpg" alt="World exploration"></td>
-    <td><img src="docs/media/switch_dungeon.jpg" alt="Dungeon exploration"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>World exploration</sub></td>
-    <td align="center"><sub>Dungeon</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/media/switch_dialogue.jpg" alt="Story dialogue"></td>
-    <td><img src="docs/media/switch_status_menu.jpg" alt="Character status menu"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Story dialogue</sub></td>
-    <td align="center"><sub>Character status & equipment</sub></td>
+    <td><img src="docs/media/switch_dialogue.jpg" alt="Screenshot"></td>
+    <td><img src="docs/media/switch_status_menu.jpg" alt="Screenshot"></td>
   </tr>
 </table>
 
